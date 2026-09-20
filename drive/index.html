@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>爱搜云盘 - Cloudflare 免费私有网盘</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 20px;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #0f172a; }
+    .auth-bar { display: flex; gap: 8px; align-items: center; }
+    input[type="password"], input[type="text"] {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+      outline: none;
+    }
+    input[type="password"]:focus, input[type="text"]:focus {
+      border-color: var(--primary);
+    }
+    button {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: var(--primary-hover); }
+    button.secondary {
+      background: #f1f5f9;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.secondary:hover { background: #e2e8f0; }
+    button.danger {
+      background: #ef4444;
+    }
+    button.danger:hover { background: #dc2626; }
+    .upload-zone {
+      background: var(--card-bg);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      text-align: center;
+      margin-bottom: 24px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .upload-zone:hover { border-color: var(--primary); }
+    .upload-zone p { color: var(--text-muted); margin-top: 8px; font-size: 14px; }
+    .file-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .file-header {
+      display: grid;
+      grid-template-columns: 3fr 1fr 1.5fr 1.5fr;
+      padding: 12px 16px;
+      background: #f1f5f9;
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .file-row {
+      display: grid;
+      grid-template-columns: 3fr 1fr 1.5fr 1.5fr;
+      padding: 12px 16px;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .file-row:last-child { border-bottom: none; }
+    .file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .file-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .file-actions a, .file-actions button {
+      font-size: 12px;
+      padding: 4px 8px;
+      text-decoration: none;
+    }
+    .empty-tip {
+      padding: 40px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    #progress-container {
+      display: none;
+      margin-top: 12px;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--primary);
+      transition: width 0.1s;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>爱搜云盘 (Cloudflare R2)</h1>
+      <div class="auth-bar">
+        <input type="password" id="auth-pwd" placeholder="输入访问/管理密码">
+        <button onclick="saveAuth()">保存</button>
+      </div>
+    </header>
+
+    <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" style="display:none" onchange="handleFileSelect(this.files)">
+      <strong>点击选择文件 或 将文件拖拽至此上传</strong>
+      <p>文件将直传至 Cloudflare R2 全球存储节点 (免费免流)</p>
+      <div id="progress-container">
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <p id="progress-text" style="font-size: 12px; margin-top: 4px;">正在上传...</p>
+      </div>
+    </div>
+
+    <div class="file-card">
+      <div class="file-header">
+        <div>文件名</div>
+        <div>大小</div>
+        <div>修改时间</div>
+        <div>操作</div>
+      </div>
+      <div id="file-list">
+        <div class="empty-tip">正在加载文件列表...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let token = localStorage.getItem('r2_drive_token') || '';
+    if (token) document.getElementById('auth-pwd').value = token;
+
+    function saveAuth() {
+      token = document.getElementById('auth-pwd').value.trim();
+      localStorage.setItem('r2_drive_token', token);
+      alert('密码已保存！');
+      loadFiles();
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    async function loadFiles() {
+      const listEl = document.getElementById('file-list');
+      try {
+        const res = await fetch('/api/files', {
+          headers: { 'Authorization': token }
+        });
+        if (res.status === 401) {
+          listEl.innerHTML = '<div class="empty-tip">请输入正确的访问密码以加载文件</div>';
+          return;
+        }
+        const data = await res.json();
+        if (!data.objects || data.objects.length === 0) {
+          listEl.innerHTML = '<div class="empty-tip">网盘暂无文件，快点击上方上传吧</div>';
+          return;
+        }
+        listEl.innerHTML = data.objects.map(f => `
+          <div class="file-row">
+            <div class="file-name" title="${f.key}">${f.key}</div>
+            <div>${formatBytes(f.size)}</div>
+            <div>${new Date(f.uploaded).toLocaleString()}</div>
+            <div class="file-actions">
+              <a href="/api/raw/${encodeURIComponent(f.key)}" target="_blank" class="secondary">下载/直链</a>
+              <button class="danger" onclick="deleteFile('${encodeURIComponent(f.key)}')">删除</button>
+            </div>
+          </div>
+        `).join('');
+      } catch (e) {
+        listEl.innerHTML = '<div class="empty-tip">加载文件失败: ' + e.message + '</div>';
+      }
+    }
+
+    async function deleteFile(encodedKey) {
+      if (!confirm('确认删除该文件？')) return;
+      try {
+        const res = await fetch(`/api/files?key=${encodedKey}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': token }
+        });
+        if (res.ok) {
+          loadFiles();
+        } else {
+          alert('删除失败，请检查密码权限');
+        }
+      } catch (e) {
+        alert('删除出错: ' + e.message);
+      }
+    }
+
+    async function handleFileSelect(files) {
+      if (!files || files.length === 0) return;
+      const file = files[0];
+      const progContainer = document.getElementById('progress-container');
+      const progFill = document.getElementById('progress-fill');
+      const progText = document.getElementById('progress-text');
+
+      progContainer.style.display = 'block';
+      progFill.style.width = '0%';
+      progText.innerText = `正在上传 ${file.name}...`;
+
+      try {
+        const res = await fetch(`/api/upload?key=${encodeURIComponent(file.name)}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': token,
+            'Content-Type': file.type || 'application/octet-stream'
+          },
+          body: file
+        });
+
+        if (res.ok) {
+          progFill.style.width = '100%';
+          progText.innerText = '上传完成！';
+          setTimeout(() => {
+            progContainer.style.display = 'none';
+            loadFiles();
+          }, 1000);
+        } else {
+          const err = await res.text();
+          alert('上传失败: ' + err);
+          progContainer.style.display = 'none';
+        }
+      } catch (e) {
+        alert('上传发生异常: ' + e.message);
+        progContainer.style.display = 'none';
+      }
+    }
+
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = '#2563eb'; });
+    dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.style.borderColor = '#e2e8f0'; });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = '#e2e8f0';
+      if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files);
+    });
+
+    loadFiles();
+  </script>
+</body>
+</html>
