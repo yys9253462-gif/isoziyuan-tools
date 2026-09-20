@@ -3,7 +3,7 @@ rem =======================================================
 rem 爱搜资源 - Cloudflare 全能网站一键搭建工具箱
 rem 项目: https://github.com/yys9253462-gif/isoziyuan-tools
 rem 支持: 1. 个人导航站 (Pages + D1)
-rem       2. 免费云网盘 (Pages + R2 10G免流存储)
+rem       2. 免费云网盘 (isoziyuan-pan: Pages + D1 + R2)
 rem       3. 账号管理与资源清理
 rem =======================================================
 setlocal enabledelayedexpansion
@@ -62,7 +62,7 @@ echo ==================================================
 echo.
 echo 请选择要搭建或执行的功能:
 echo   [1] 一键搭建 个人导航站 (Pages + D1 数据库)
-echo   [2] 一键搭建 免费云网盘 (Pages + R2 10G免流存储)
+echo   [2] 一键搭建 免费云网盘 (isoziyuan-pan: Pages + D1 + R2)
 echo   [3] 清除 GitHub / Cloudflare 登录授权状态
 echo   [4] 一键清理远程已建的 isoziyuan 相关项目
 echo   [Q] 退出工具箱
@@ -99,7 +99,7 @@ echo   正在准备启动 [免费云网盘] 部署流程...
 echo ==================================================
 
 rem 环境检测
-echo [1/5] 检测基础运行环境...
+echo [1/7] 检测基础运行环境 (Node.js)...
 where node >nul 2>nul
 if errorlevel 1 (
     echo [X] 未检测到 Node.js，请先安装 Node.js 环境。
@@ -109,7 +109,7 @@ if errorlevel 1 (
 echo [OK] Node.js 环境正常
 
 rem 登录检测
-echo [2/5] 检查 Cloudflare 授权状态...
+echo [2/7] 检查 Cloudflare 授权状态...
 call npx wrangler whoami >nul 2>nul
 if errorlevel 1 (
     echo 正在调起浏览器进行 Cloudflare 授权...
@@ -117,49 +117,97 @@ if errorlevel 1 (
 )
 echo [OK] Cloudflare 授权验证通过
 
-rem 创建 R2 存储桶
-echo [3/5] 检查并创建 R2 存储桶: isoziyuan-drive-bucket ...
-call npx wrangler r2 bucket create isoziyuan-drive-bucket >nul 2>nul
+rem 1. 创建或检查 R2 存储桶
+set "BUCKET_NAME=isoziyuan-pan-bucket"
+echo [3/7] 检查并创建 R2 存储桶: %BUCKET_NAME% ...
+call npx wrangler r2 bucket create %BUCKET_NAME% >nul 2>nul
 echo [OK] R2 存储桶准备就绪 (10GB 免费容量)
 
-rem 部署 Pages 网盘前端与 API
-echo [4/5] 部署网盘项目到 Cloudflare Pages ...
+rem 2. 创建或检查 D1 数据库
+set "D1_NAME=isoziyuan-pan-db"
+echo [4/7] 检查并创建 D1 数据库: %D1_NAME% ...
 cd drive
-call npx wrangler pages project create isoziyuan-drive --production-branch main >nul 2>nul
+set "PAN_DB_ID="
+set "DB_LIST_TMP=%TEMP%\pan_d1_list_%RANDOM%.json"
+call npx wrangler d1 list --json > "%DB_LIST_TMP%" 2>nul
+powershell -NoProfile -Command "$data=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText('%DB_LIST_TMP%')); foreach($item in @($data)){if($item.name -eq '%D1_NAME%'){[Console]::Write($item.uuid); break}}" > "%TEMP%\pan_dbid.tmp" 2>nul
+if exist "%TEMP%\pan_dbid.tmp" set /p PAN_DB_ID=<"%TEMP%\pan_dbid.tmp"
+if exist "%DB_LIST_TMP%" del "%DB_LIST_TMP%" >nul 2>nul
+if exist "%TEMP%\pan_dbid.tmp" del "%TEMP%\pan_dbid.tmp" >nul 2>nul
 
-rem 设置管理员密码
+if not defined PAN_DB_ID (
+    echo   正在创建全新 D1 数据库...
+    call npx wrangler d1 create %D1_NAME% > "%TEMP%\pan_d1_create.txt" 2>&1
+    powershell -NoProfile -Command "$text=[IO.File]::ReadAllText('%TEMP%\pan_d1_create.txt'); $m=[regex]::Match($text,'(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'); if($m.Success){[Console]::Write($m.Value)}" > "%TEMP%\pan_dbid.tmp" 2>nul
+    if exist "%TEMP%\pan_dbid.tmp" set /p PAN_DB_ID=<"%TEMP%\pan_dbid.tmp"
+    if exist "%TEMP%\pan_d1_create.txt" del "%TEMP%\pan_d1_create.txt" >nul 2>nul
+    if exist "%TEMP%\pan_dbid.tmp" del "%TEMP%\pan_dbid.tmp" >nul 2>nul
+)
+
+if not defined PAN_DB_ID (
+    echo [X] 未能获取或创建 D1 数据库，请检查网络后重试。
+    cd ..
+    pause
+    exit /b 1
+)
+echo [OK] D1 数据库准备就绪: %PAN_DB_ID%
+
+rem 校准 wrangler.jsonc 中的数据库 ID
+powershell -NoProfile -Command "$f='wrangler.jsonc'; $t=[IO.File]::ReadAllText($f); $t=[regex]::Replace($t,'(?i)(\"database_id\":\s*\")[^\"]*(\")','$1'+$env:PAN_DB_ID+'$2'); [IO.File]::WriteAllText($f,$t)"
+
+rem 3. 初始化 D1 数据表
+echo [5/7] 初始化网盘数据表结构 (schema.sql)...
+call npx wrangler d1 execute DB --remote --file schema.sql --yes >nul 2>nul
+echo [OK] 数据表初始化完成
+
+rem 4. 创建 Pages 项目与设置密码
+echo [6/7] 创建 Cloudflare Pages 项目与配置密码...
+call npx wrangler pages project create isoziyuan-pan --production-branch main >nul 2>nul
+
 echo.
-echo 请设置网盘访问/管理密码 (直接回车生成随机密码):
-set "DRIVE_PASS="
-set /p DRIVE_PASS=密码 (6-32位字母数字): 
-if "%DRIVE_PASS%"=="" set "DRIVE_PASS=Drive%RANDOM%2026"
-echo 你的网盘管理密码为: %DRIVE_PASS%
-echo (请妥善保存)
+echo 请设置网盘管理员密码 (用于后台 /admin.html 管理、上传与提取码设置):
+set "PAN_PASS="
+set /p PAN_PASS=请输入 6-32 位密码 (直接回车生成随机强密码): 
+if "%PAN_PASS%"=="" (
+    powershell -NoProfile -Command "[Console]::Write('Pan'+[Guid]::NewGuid().ToString('N').Substring(0,10)+'2026')" > "%TEMP%\pan_pass.tmp"
+    if exist "%TEMP%\pan_pass.tmp" set /p PAN_PASS=<"%TEMP%\pan_pass.tmp"
+    if exist "%TEMP%\pan_pass.tmp" del "%TEMP%\pan_pass.tmp" >nul 2>nul
+)
+if not defined PAN_PASS set "PAN_PASS=PanAdmin2026"
 
-powershell -NoProfile -Command "[IO.File]::WriteAllText('drivepass.tmp','%DRIVE_PASS%',[Text.UTF8Encoding]::new($false))"
-call npx wrangler pages secret put ADMIN_PASSWORD --project-name isoziyuan-drive < drivepass.tmp >nul 2>nul
-if exist drivepass.tmp del drivepass.tmp
+echo 您的网盘管理密码为: %PAN_PASS%
+echo (正在安全加密写入 Cloudflare Secrets...)
 
-rem 部署
+powershell -NoProfile -Command "[IO.File]::WriteAllText('panpass.tmp','%PAN_PASS%',[Text.UTF8Encoding]::new($false))"
+call npx wrangler pages secret put ADMIN_PASSWORD --project-name isoziyuan-pan < panpass.tmp >nul 2>nul
+if exist panpass.tmp del panpass.tmp
+
+rem 5. 部署 Pages
 echo.
-echo [5/5] 正在发布到全球边缘网络...
-call npx wrangler pages deploy . --project-name isoziyuan-drive --branch main --commit-dirty=true
+echo [7/7] 正在部署网盘到 Cloudflare 全球边缘网络...
+call npx wrangler pages deploy . --project-name isoziyuan-pan --branch main --commit-dirty=true
 
 echo.
 echo ==================================================
-echo   恭喜！云网盘部署成功！
-echo   管理密码: %DRIVE_PASS%
-echo   访问地址: https://isoziyuan-drive.pages.dev
+echo   恭喜！爱搜云盘部署成功！
+echo   网盘前台: https://isoziyuan-pan.pages.dev
+echo   提取文件: https://isoziyuan-pan.pages.dev/pickup.html
+echo   管理后台: https://isoziyuan-pan.pages.dev/admin.html
+echo   管理密码: %PAN_PASS%
 echo ==================================================
 echo.
+
 set "DESK_FILE=%USERPROFILE%\Desktop\爱搜云盘信息.txt"
 > "%DESK_FILE%" echo ==============================
->> "%DESK_FILE%" echo 爱搜云盘 - 访问凭据
+>> "%DESK_FILE%" echo 爱搜云盘 - 部署凭据
 >> "%DESK_FILE%" echo ==============================
->> "%DESK_FILE%" echo 网盘网址: https://isoziyuan-drive.pages.dev
->> "%DESK_FILE%" echo 访问密码: %DRIVE_PASS%
+>> "%DESK_FILE%" echo 网盘前台: https://isoziyuan-pan.pages.dev
+>> "%DESK_FILE%" echo 提取页面: https://isoziyuan-pan.pages.dev/pickup.html
+>> "%DESK_FILE%" echo 管理后台: https://isoziyuan-pan.pages.dev/admin.html
+>> "%DESK_FILE%" echo 管理账号: admin
+>> "%DESK_FILE%" echo 管理密码: %PAN_PASS%
 >> "%DESK_FILE%" echo 部署时间: %date% %time%
-echo 信息已备份至桌面: 爱搜云盘信息.txt
+echo 账号与访问信息已备份至桌面: 爱搜云盘信息.txt
 cd ..
 pause
 exit /b 0

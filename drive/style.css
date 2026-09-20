@@ -1,0 +1,310 @@
+/* ============================================================
+   爱搜云盘 · 公开取件页样式
+   --------------------------------------------
+   服务页面：index.html（输入取件码）、pickup.html（文件落地页）
+   设计令牌来自 tokens.css；后台样式见 admin.css
+   ============================================================ */
+
+/* ---------- 1. 页面骨架 ---------- */
+/* 居中容器：取件页的一切都以「一屏之内、无需滚动」为目标 */
+.center-page {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: var(--sp-6);
+  overflow: hidden;
+}
+
+/* 背景光晕（纯装饰，不参与交互） */
+.center-page::before {
+  content: "";
+  position: absolute;
+  width: min(620px, 130vw);
+  height: min(620px, 130vw);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.17), transparent 66%);
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+/* ---------- 2. 取件面板 ---------- */
+.panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.public-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(440px, 100%);
+  padding: 34px 30px 26px;
+  text-align: center;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.public-panel .logo {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--sp-4);
+  font-size: 25px;
+  font-weight: 800;
+  color: #fff;
+  border-radius: 15px;
+  background: var(--accent-gradient);
+  box-shadow: 0 10px 24px -8px rgba(99, 102, 241, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.eyebrow {
+  margin: 0 0 var(--sp-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+.public-panel h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.muted {
+  margin: var(--sp-2) 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.public-panel form {
+  width: 100%;
+  margin-top: var(--sp-6);
+}
+
+/* ---------- 3. 取件码格子 ---------- */
+.code-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 0 0 var(--sp-5);
+}
+
+.code-grid input {
+  width: 100%;
+  height: 60px;
+  margin: 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  outline: none;
+  caret-color: var(--accent-text);
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
+    background var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.code-grid input:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.code-grid input:focus,
+.code-grid input:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 4px var(--accent-ring), 0 0 26px rgba(99, 102, 241, 0.22);
+  transform: translateY(-2px);
+}
+
+/* ---------- 4. 主按钮 ---------- */
+.public-panel .button,
+.public-panel button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 14px var(--sp-4);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  color: #fff;
+  text-decoration: none;
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.public-panel .button:hover,
+.public-panel button:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px -6px rgba(99, 102, 241, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.public-panel .button:active,
+.public-panel button:active {
+  transform: translateY(0.5px);
+}
+.public-panel .button:disabled,
+.public-panel button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.public-panel .button:focus-visible,
+.public-panel button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* ---------- 4b. 状态：加载中 / 取件失败 ---------- */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* 查询中：标题轻微呼吸，暗示「正在处理」而非「卡住了」 */
+.public-panel.is-loading h1 {
+  animation: pulse-soft 1.6s var(--ease) infinite;
+}
+
+/* 取件失败：Logo 与标题转为危险色，让失败一眼可辨 */
+.public-panel.is-error .logo {
+  background: linear-gradient(140deg, #f43f5e, #be123c);
+  box-shadow: 0 10px 24px -8px rgba(244, 63, 94, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.public-panel.is-error .eyebrow {
+  color: #fda4af;
+}
+.public-panel.is-error h1 {
+  font-size: 20px;
+  color: #fda4af;
+}
+/* 失败态下「确认来源可信后再下载」已无意义，隐藏以免误导 */
+.public-panel.is-error .hint {
+  display: none;
+}
+
+/* ---------- 5. 附注与回退链接 ---------- */
+.public-panel .hint {
+  margin: var(--sp-5) 0 0;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--sp-5);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-radius: var(--r-sm);
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+.back-link:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ---------- 6. 管理员入口 ---------- */
+.admin-link {
+  position: fixed;
+  top: var(--sp-6);
+  right: var(--sp-6);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  background: rgba(12, 14, 18, 0.78);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+.admin-link:hover {
+  color: var(--text);
+  background: rgba(21, 24, 30, 0.92);
+  border-color: var(--accent-ring);
+}
+
+/* ---------- 7. 响应式（移动端优先验证 390px）---------- */
+@media (max-width: 460px) {
+  .center-page {
+    padding: var(--sp-4);
+  }
+  .public-panel {
+    padding: 30px 20px var(--sp-6);
+  }
+  .public-panel h1 {
+    font-size: 22px;
+  }
+  .code-grid {
+    gap: 7px;
+  }
+  .code-grid input {
+    height: 52px;
+    font-size: 21px;
+    border-radius: var(--r-md);
+  }
+  /* 移动端入口缩小，但仍保证可点 */
+  .admin-link {
+    top: var(--sp-3);
+    right: var(--sp-3);
+    padding: var(--sp-2) var(--sp-3);
+    font-size: 12px;
+  }
+}
+
+/* 横屏矮视口：收紧纵向留白，避免出现滚动条 */
+@media (max-height: 620px) {
+  .center-page {
+    align-items: flex-start;
+    padding-top: var(--sp-6);
+  }
+  .public-panel .logo {
+    width: 44px;
+    height: 44px;
+    font-size: 21px;
+    margin-bottom: var(--sp-3);
+  }
+  .code-grid input {
+    height: 52px;
+  }
+}

@@ -1,46 +1,14 @@
-function checkAuth(request, env) {
-  const adminPass = env.ADMIN_PASSWORD;
-  if (!adminPass) return true; // 未设置密码则默认允许
-  const authHeader = request.headers.get("Authorization") || "";
-  return authHeader === adminPass;
-}
+import { errorResponse, filePayload, isAdmin, json, normalizePath, requireAdmin } from "../_lib.js";
 
 export async function onRequestGet({ request, env }) {
-  if (!checkAuth(request, env)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  const denied = requireAdmin(await isAdmin(request, env));
+  if (denied) return denied;
+  const folder = normalizePath(new URL(request.url).searchParams.get("folder"), true);
+  const storage = new URL(request.url).searchParams.get("storage") === "aws" ? "aws" : "r2";
+  try {
+    const result = await env.DB.prepare("SELECT * FROM files WHERE storage = ?1 AND folder = ?2 ORDER BY kind DESC, name COLLATE NOCASE ASC").bind(storage, folder).all();
+    return json({ folder, storage, files: (result.results || []).map(filePayload) });
+  } catch (error) {
+    return errorResponse(error, "无法读取文件列表");
   }
-
-  const url = new URL(request.url);
-  const cursor = url.searchParams.get("cursor");
-  const limit = Math.min(parseInt(url.searchParams.get("limit") || "100"), 100);
-
-  const bucket = env.DRIVE_BUCKET;
-  if (!bucket) {
-    return new Response(JSON.stringify({ error: "R2 Bucket not bound" }), { status: 500 });
-  }
-
-  const listed = await bucket.list({
-    limit,
-    cursor: cursor || undefined,
-  });
-
-  return new Response(JSON.stringify(listed), {
-    headers: { "Content-Type": "application/json" }
-  });
-}
-
-export async function onRequestDelete({ request, env }) {
-  if (!checkAuth(request, env)) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-  }
-
-  const url = new URL(request.url);
-  const key = url.searchParams.get("key");
-  if (!key) {
-    return new Response("Missing key", { status: 400 });
-  }
-
-  const bucket = env.DRIVE_BUCKET;
-  await bucket.delete(key);
-  return new Response("Deleted", { status: 200 });
 }
