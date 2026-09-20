@@ -1,0 +1,21 @@
+{
+  "name": "works-blog-hono",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler pages dev",
+    "deploy": "wrangler pages deploy",
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "hono": "^4.6.14",
+    "drizzle-orm": "^0.38.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "drizzle-kit": "^0.30.1",
+    "wrangler": "^3.101.0",
+    "@types/node": "^20.11.17"
+  }
+}
