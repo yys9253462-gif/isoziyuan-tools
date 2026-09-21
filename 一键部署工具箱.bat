@@ -67,14 +67,16 @@ echo   [1] 一键搭建 个人导航站 (Pages + D1 数据库)
 echo   [2] 一键搭建 免费云网盘 (isoziyuan-pan: Pages + D1 + R2)
 echo   [3] 一键搭建 个人轻量博客 [纯净版] (零门槛, 无需R2, 仅需D1)
 echo   [4] 一键搭建 个人全能博客 [图床版] (带R2存储, 支持文章插图)
-echo   [5] 清除 GitHub / Cloudflare 登录授权状态
-echo   [6] 一键清理远程已建的 isoziyuan 相关项目
+echo   [5] 一键搭建 极简无服务器论坛 [CForum] (帖子/多级评论/图片/2FA)
+echo   [6] 清除 GitHub / Cloudflare 登录授权状态
+echo   [7] 一键清理远程已建的 isoziyuan 相关项目
 echo   [Q] 退出工具箱
 echo.
-choice /c 123456Q /m "请输入选项编号: "
-if errorlevel 7 exit /b 0
-if errorlevel 6 goto menu_cleanup
-if errorlevel 5 goto menu_logout
+choice /c 1234567Q /m "请输入选项编号: "
+if errorlevel 8 exit /b 0
+if errorlevel 7 goto menu_cleanup
+if errorlevel 6 goto menu_logout
+if errorlevel 5 goto menu_forum
 if errorlevel 4 goto menu_blog_pro
 if errorlevel 3 goto menu_blog_lite
 if errorlevel 2 goto menu_drive
@@ -389,7 +391,103 @@ cd ..
 pause
 exit /b 0
 
-rem ---------- 模式 5: 清除授权 ----------
+rem ---------- 模式 5: 部署无服务器论坛 (CForum) ----------
+:menu_forum
+echo.
+echo ==================================================
+echo   正在准备启动 [极简无服务器论坛·CForum] 部署流程...
+echo ==================================================
+
+echo [1/8] 检测基础运行环境 (Node.js)...
+where node >nul 2>nul
+if errorlevel 1 (
+    echo [X] 未检测到 Node.js，请先安装 Node.js 环境。
+    pause
+    exit /b 1
+)
+echo [OK] Node.js 环境正常
+
+echo [2/8] 检查 Cloudflare 授权状态...
+call npx wrangler whoami >nul 2>nul
+if errorlevel 1 (
+    echo 正在调起浏览器进行 Cloudflare 授权...
+    call npx wrangler login
+)
+echo [OK] Cloudflare 授权验证通过
+
+set "R2_NAME=isoziyuan-forum-media"
+echo [3/8] 检查并创建 R2 图片存储桶: %R2_NAME% ...
+call npx wrangler r2 bucket create %R2_NAME% >nul 2>nul
+echo [OK] R2 存储桶准备就绪
+
+set "D1_NAME=isoziyuan-forum-db"
+echo [4/8] 检查并创建 D1 数据库: %D1_NAME% ...
+cd forum
+set "FORUM_DB_ID="
+set "DB_LIST_TMP=%TEMP%\forum_d1_%RANDOM%.json"
+call npx wrangler d1 list --json > "%DB_LIST_TMP%" 2>nul
+powershell -NoProfile -Command "$data=ConvertFrom-Json -InputObject ([IO.File]::ReadAllText('%DB_LIST_TMP%')); foreach($item in @($data)){if($item.name -eq '%D1_NAME%'){[Console]::Write($item.uuid); break}}" > "%TEMP%\forum_dbid.tmp" 2>nul
+if exist "%TEMP%\forum_dbid.tmp" set /p FORUM_DB_ID=<"%TEMP%\forum_dbid.tmp"
+if exist "%DB_LIST_TMP%" del "%DB_LIST_TMP%" >nul 2>nul
+if exist "%TEMP%\forum_dbid.tmp" del "%TEMP%\forum_dbid.tmp" >nul 2>nul
+
+if not defined FORUM_DB_ID (
+    echo   正在创建全新 D1 数据库...
+    call npx wrangler d1 create %D1_NAME% > "%TEMP%\forum_create.txt" 2>&1
+    powershell -NoProfile -Command "$text=[IO.File]::ReadAllText('%TEMP%\forum_create.txt'); $m=[regex]::Match($text,'(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'); if($m.Success){[Console]::Write($m.Value)}" > "%TEMP%\forum_dbid.tmp" 2>nul
+    if exist "%TEMP%\forum_dbid.tmp" set /p FORUM_DB_ID=<"%TEMP%\forum_dbid.tmp"
+    if exist "%TEMP%\forum_create.txt" del "%TEMP%\forum_create.txt" >nul 2>nul
+    if exist "%TEMP%\forum_dbid.tmp" del "%TEMP%\forum_dbid.tmp" >nul 2>nul
+)
+
+if not defined FORUM_DB_ID (
+    echo [X] 未能获取或创建 D1 数据库。
+    cd ..
+    pause
+    exit /b 1
+)
+echo [OK] D1 数据库准备就绪: %FORUM_DB_ID%
+
+powershell -NoProfile -Command "$f='wrangler.jsonc'; $t=[IO.File]::ReadAllText($f); $t=[regex]::Replace($t,'(?i)(\"database_id\":\s*\")[^\"]*(\")','$1'+$env:FORUM_DB_ID+'$2'); [IO.File]::WriteAllText($f,$t)"
+
+echo [5/8] 初始化论坛数据表与分类 (schema.sql)...
+call npx wrangler d1 execute cforum_db --remote --file schema.sql --yes >nul 2>nul
+echo [OK] 论坛数据表初始化完成
+
+echo [6/8] 注入 JWT 鉴权密钥...
+set "JWT_SEC=ForumJwt%RANDOM%%RANDOM%SecureKey2026"
+powershell -NoProfile -Command "[IO.File]::WriteAllText('jwt.tmp','%JWT_SEC%',[Text.UTF8Encoding]::new($false))"
+call npx wrangler secret put JWT_SECRET --name isoziyuan-forum < jwt.tmp >nul 2>nul
+if exist jwt.tmp del jwt.tmp
+
+echo [7/8] 部署论坛后端 Worker (API & D1/R2)...
+call npx wrangler deploy --name isoziyuan-forum
+
+echo [8/8] 部署论坛前端界面到 Cloudflare Pages...
+call npx wrangler pages project create isoziyuan-forum --production-branch main >nul 2>nul
+call npx wrangler pages deploy public --project-name isoziyuan-forum --branch main --commit-dirty=true
+
+echo.
+echo ==================================================
+echo   恭喜！极简无服务器论坛 (CForum) 部署完成！
+echo   论坛前台: https://isoziyuan-forum.pages.dev
+echo   后端 API: https://isoziyuan-forum.workers.dev
+echo ==================================================
+echo.
+
+set "DESK_FILE=%USERPROFILE%\Desktop\爱搜论坛信息.txt"
+> "%DESK_FILE%" echo ==============================
+>> "%DESK_FILE%" echo 爱搜无服务器论坛 - 访问凭据
+>> "%DESK_FILE%" echo ==============================
+>> "%DESK_FILE%" echo 论坛首页: https://isoziyuan-forum.pages.dev
+>> "%DESK_FILE%" echo 后端接口: https://isoziyuan-forum.workers.dev
+>> "%DESK_FILE%" echo 部署时间: %date% %time%
+echo 访问信息已保存至桌面: 爱搜论坛信息.txt
+cd ..
+pause
+exit /b 0
+
+rem ---------- 模式 6: 清除授权 ----------
 :menu_logout
 echo.
 echo 正在清理本地 GitHub 与 Cloudflare 授权状态...
@@ -399,7 +497,7 @@ echo [OK] 已清理所有登录状态。
 pause
 exit /b 0
 
-rem ---------- 模式 6: 清理资源 ----------
+rem ---------- 模式 7: 清理资源 ----------
 :menu_cleanup
 echo.
 if exist "nav\一键搭建导航站.bat" (

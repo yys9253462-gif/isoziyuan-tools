@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "isoziyuan-forum",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-27",
+  "compatibility_flags": [
+    "global_fetch_strictly_public"
+  ],
+  "d1_databases": [
+    {
+      "binding": "cforum_db",
+      "database_name": "isoziyuan-forum-db",
+      "database_id": "DATABASE_ID_PLACEHOLDER"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "isoziyuan-forum-media"
+    }
+  ],
+  "workers_dev": true
+}
