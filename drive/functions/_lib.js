@@ -77,7 +77,7 @@ export function splitPath(path) {
 }
 
 export function filePayload(row) {
-  return { id: row.id, name: row.name, folder: row.folder, kind: row.kind, storage: row.storage || "r2", size: Number(row.size || 0), contentType: row.content_type, updatedAt: Number(row.updated_at) };
+  return { id: row.id, name: row.name, folder: row.folder, kind: row.kind, storage: row.storage || "r2", size: Number(row.size || 0), contentType: row.content_type, updatedAt: Number(row.updated_at), shareCount: Number(row.share_count || 0), shareActive: Number(row.share_active || 0) };
 }
 
 export function errorResponse(error, fallback = "操作失败") {

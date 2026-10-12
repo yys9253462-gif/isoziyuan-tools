@@ -6,6 +6,31 @@ function randomCode() {
   return String(values[0] % 100000).padStart(5, "0");
 }
 
+export async function onRequestGet({ request, env }) {
+  const denied = requireAdmin(await isAdmin(request, env));
+  if (denied) return denied;
+  const fileId = String(new URL(request.url).searchParams.get("fileId") || "");
+  if (!fileId) return json({ error: "缺少 fileId" }, 400);
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const result = await env.DB.prepare(
+      "SELECT code, file_id, expires_at, remaining, downloads, created_at FROM shares WHERE file_id = ?1 ORDER BY created_at DESC"
+    ).bind(fileId).all();
+    const shares = (result.results || []).map((row) => ({
+      code: row.code,
+      expiresAt: Number(row.expires_at || 0),
+      remaining: row.remaining === null ? null : Number(row.remaining),
+      downloads: Number(row.downloads || 0),
+      createdAt: Number(row.created_at || 0),
+      expired: Boolean(row.expires_at) && Number(row.expires_at) <= now,
+      exhausted: row.remaining !== null && Number(row.remaining) <= 0,
+    }));
+    return json({ ok: true, fileId, shares });
+  } catch (error) {
+    return errorResponse(error, "查询分享记录失败");
+  }
+}
+
 export async function onRequestPost({ request, env }) {
   const denied = requireAdmin(await isAdmin(request, env));
   if (denied) return denied;
