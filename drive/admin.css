@@ -1129,6 +1129,12 @@ td:first-child {
   background: var(--surface-3);
   border-color: var(--border-strong);
 }
+.share-badge-dl {
+  margin-left: 7px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--text-muted);
+}
 
 /* ---------- 11. 吐司 ---------- */
 .toast {
